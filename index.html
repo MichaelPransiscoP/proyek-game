@@ -9,33 +9,45 @@
 <script>
 const SIZE = 9;
 const CELL = 50;
+
 let selected = {row:0,col:0};
 let cells=[];
 let numbers=[];
 let solution=[];
 let fixedMap=[];
-let timerText;
 let seconds=0;
+let timerText;
 let timerEvent;
+let sceneRef;
+let currentLevel="medium";
+let offsetX=0;
 
+/* ================== PHASER CONFIG ================== */
 const config={
   type:Phaser.AUTO,
-  width:SIZE*CELL,
-  height:SIZE*CELL+80,
+  width:600,
+  height:540,
   backgroundColor:"#ffffff",
   scene:{create}
 };
 
 new Phaser.Game(config);
 
+/* ================== CREATE ================== */
 function create(){
-  const scene=this;
+  sceneRef=this;
 
-  // ===== SELECT LEVEL (SATU BUTTON) =====
+  const centerX = this.cameras.main.width/2;
+
+  // ===== LEVEL SELECT (ATAS TENGAH) =====
   const select=document.createElement("select");
   select.style.position="absolute";
-  select.style.top="10px";
-  select.style.left="10px";
+  select.style.top="15px";
+  select.style.left="50%";
+  select.style.transform="translateX(-50%)";
+  select.style.padding="6px";
+  select.style.fontSize="16px";
+
   select.innerHTML=`
     <option value="easy">Easy</option>
     <option value="medium" selected>Medium</option>
@@ -44,30 +56,46 @@ function create(){
   document.body.appendChild(select);
 
   select.onchange=()=>{
-    startGame(scene,select.value);
+    const ok=confirm("Ganti level? Progress kamu akan hilang.");
+    if(!ok){
+      select.value=currentLevel;
+      return;
+    }
+    currentLevel=select.value;
+    loadLevel(currentLevel);
   };
 
-  timerText=scene.add.text(250,460,"Time: 0s",{fontSize:"20px",color:"#000"});
+  // ===== TIMER =====
+  timerText=this.add.text(centerX,500,"Time: 0s",{
+    fontSize:"22px",
+    color:"#000"
+  }).setOrigin(0.5);
 
-  startGame(scene,"medium");
+  loadLevel("medium");
 }
 
-function startGame(scene,level){
-  scene.scene.restart({level});
-}
+/* ================== LOAD LEVEL ================== */
+function loadLevel(level){
 
-function initBoard(scene,level){
   seconds=0;
+  offsetX=(sceneRef.cameras.main.width - SIZE*CELL)/2;
+
+  if(timerEvent) timerEvent.remove();
+
   numbers=generatePuzzle(level);
   solution=JSON.parse(JSON.stringify(numbers));
   solveBoard(solution);
 
-  fixedMap=[];
+  // clear old
+  cells.flat().forEach(c=>{
+    c.rect.destroy();
+    c.text.destroy();
+  });
   cells=[];
+  fixedMap=[];
 
-  if(timerEvent) timerEvent.remove();
-
-  timerEvent=scene.time.addEvent({
+  // timer
+  timerEvent=sceneRef.time.addEvent({
     delay:1000,
     loop:true,
     callback:()=>{
@@ -76,14 +104,16 @@ function initBoard(scene,level){
     }
   });
 
+  // draw board
   for(let r=0;r<SIZE;r++){
     cells[r]=[];
     fixedMap[r]=[];
-    for(let c=0;c<SIZE;c++){
-      let x=c*CELL+CELL/2;
-      let y=r*CELL+CELL/2;
 
-      let rect=scene.add.rectangle(x,y,CELL-2,CELL-2,0xf0f0f0)
+    for(let c=0;c<SIZE;c++){
+      let x=offsetX + c*CELL + CELL/2;
+      let y=60 + r*CELL + CELL/2;
+
+      let rect=sceneRef.add.rectangle(x,y,CELL-2,CELL-2,0xf0f0f0)
         .setStrokeStyle(1,0x000000)
         .setInteractive();
 
@@ -95,7 +125,7 @@ function initBoard(scene,level){
       let fixed=numbers[r][c]!==0;
       fixedMap[r][c]=fixed;
 
-      let text=scene.add.text(x,y,numbers[r][c]||"",{
+      let text=sceneRef.add.text(x,y,numbers[r][c]||"",{
         fontSize:"20px",
         color:"#000"
       }).setOrigin(0.5);
@@ -104,20 +134,18 @@ function initBoard(scene,level){
     }
   }
 
-  highlight();
-  refreshColors();
+  sceneRef.input.keyboard.removeAllListeners();
 
-  scene.input.keyboard.removeAllListeners();
-
-  scene.input.keyboard.on("keydown",(e)=>{
+  sceneRef.input.keyboard.on("keydown",(e)=>{
     if(fixedMap[selected.row][selected.col]) return;
 
     let n=parseInt(e.key);
+
     if(n>=1 && n<=9){
       numbers[selected.row][selected.col]=n;
       cells[selected.row][selected.col].text.setText(n);
       refreshColors();
-      checkWin(scene);
+      checkWin();
     }
 
     if(e.key==="Backspace"){
@@ -126,14 +154,12 @@ function initBoard(scene,level){
       refreshColors();
     }
   });
+
+  highlight();
+  refreshColors();
 }
 
-function create(data){
-  const scene=this;
-  const level=data.level||"medium";
-  initBoard(scene,level);
-}
-
+/* ================== UI ================== */
 function highlight(){
   for(let r=0;r<SIZE;r++)
     for(let c=0;c<SIZE;c++)
@@ -142,11 +168,12 @@ function highlight(){
   cells[selected.row][selected.col].rect.setFillStyle(0xffe066);
 }
 
+/* ================== VALIDATION ================== */
 function isValid(board,row,col,num){
-  for(let c=0;c<SIZE;c++)
+  for(let c=0;c<9;c++)
     if(c!==col && board[row][c]===num) return false;
 
-  for(let r=0;r<SIZE;r++)
+  for(let r=0;r<9;r++)
     if(r!==row && board[r][col]===num) return false;
 
   let sr=Math.floor(row/3)*3;
@@ -160,8 +187,8 @@ function isValid(board,row,col,num){
 }
 
 function refreshColors(){
-  for(let r=0;r<SIZE;r++){
-    for(let c=0;c<SIZE;c++){
+  for(let r=0;r<9;r++){
+    for(let c=0;c<9;c++){
       let v=numbers[r][c];
       if(v===0) cells[r][c].text.setColor("#000");
       else if(isValid(numbers,r,c,v)) cells[r][c].text.setColor("#000");
@@ -170,50 +197,43 @@ function refreshColors(){
   }
 }
 
-function checkWin(scene){
-  for(let r=0;r<SIZE;r++){
-    for(let c=0;c<SIZE;c++){
-      if(numbers[r][c]===0) return;
+/* ================== WIN CHECK ================== */
+function checkWin(){
+  for(let r=0;r<9;r++)
+    for(let c=0;c<9;c++)
       if(numbers[r][c]!==solution[r][c]) return;
-    }
-  }
 
   timerEvent.remove();
-  scene.add.text(150,200,"YOU WIN!",{
-    fontSize:"40px",
+
+  sceneRef.add.text(sceneRef.cameras.main.width/2,250,"YOU WIN!",{
+    fontSize:"42px",
     color:"#00aa00"
-  });
+  }).setOrigin(0.5);
 }
 
-/* =========================
-   GENERATOR SUDOKU RANDOM
-========================= */
-
+/* ================== GENERATOR ================== */
 function generatePuzzle(level){
-  let board=createEmpty();
+  let board=Array.from({length:9},()=>Array(9).fill(0));
   solveBoard(board);
-  let removeCount={easy:35,medium:45,hard:55}[level];
 
-  while(removeCount>0){
+  let remove={easy:35,medium:45,hard:55}[level];
+
+  while(remove>0){
     let r=Math.floor(Math.random()*9);
     let c=Math.floor(Math.random()*9);
     if(board[r][c]!==0){
       board[r][c]=0;
-      removeCount--;
+      remove--;
     }
   }
   return board;
-}
-
-function createEmpty(){
-  return Array.from({length:9},()=>Array(9).fill(0));
 }
 
 function solveBoard(board){
   for(let r=0;r<9;r++){
     for(let c=0;c<9;c++){
       if(board[r][c]===0){
-        let nums=shuffle([1,2,3,4,5,6,7,8,9]);
+        let nums=[1,2,3,4,5,6,7,8,9].sort(()=>Math.random()-0.5);
         for(let n of nums){
           if(isValid(board,r,c,n)){
             board[r][c]=n;
@@ -227,11 +247,6 @@ function solveBoard(board){
   }
   return true;
 }
-
-function shuffle(arr){
-  return arr.sort(()=>Math.random()-0.5);
-}
 </script>
-
 </body>
 </html>
