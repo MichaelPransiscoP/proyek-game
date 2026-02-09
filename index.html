@@ -11,35 +11,91 @@ const SIZE = 9;
 const CELL = 50;
 let selected = {row: 0, col: 0};
 let cells = [];
+let numbers = [];
 
-let numbers = [
-  [5,3,0, 0,7,0, 0,0,0],
-  [6,0,0, 1,9,5, 0,0,0],
-  [0,9,8, 0,0,0, 0,6,0],
+// =======================
+// 3 LEVEL PUZZLE
+// =======================
+const puzzles = {
+  easy: [
+    [5,3,0, 6,7,8, 9,1,2],
+    [6,7,2, 1,9,5, 3,4,8],
+    [0,9,8, 3,4,2, 5,6,7],
 
-  [8,0,0, 0,6,0, 0,0,3],
-  [4,0,0, 8,0,3, 0,0,1],
-  [7,0,0, 0,2,0, 0,0,6],
+    [8,5,9, 7,6,1, 4,2,3],
+    [4,2,6, 8,5,3, 7,9,1],
+    [7,1,3, 9,2,4, 8,5,6],
 
-  [0,6,0, 0,0,0, 2,8,0],
-  [0,0,0, 4,1,9, 0,0,5],
-  [0,0,0, 0,8,0, 0,7,9]
-];
+    [9,6,1, 5,3,7, 2,8,4],
+    [2,8,7, 4,1,9, 6,3,5],
+    [3,4,5, 2,8,6, 1,7,0]
+  ],
+
+  medium: [
+    [5,3,0, 0,7,0, 0,0,0],
+    [6,0,0, 1,9,5, 0,0,0],
+    [0,9,8, 0,0,0, 0,6,0],
+
+    [8,0,0, 0,6,0, 0,0,3],
+    [4,0,0, 8,0,3, 0,0,1],
+    [7,0,0, 0,2,0, 0,0,6],
+
+    [0,6,0, 0,0,0, 2,8,0],
+    [0,0,0, 4,1,9, 0,0,5],
+    [0,0,0, 0,8,0, 0,7,9]
+  ],
+
+  hard: [
+    [0,0,0, 0,0,0, 0,1,2],
+    [0,0,0, 0,0,7, 0,0,0],
+    [0,0,1, 0,9,0, 0,0,0],
+
+    [0,0,0, 5,0,0, 0,0,0],
+    [0,0,0, 1,0,4, 0,0,0],
+    [0,0,0, 0,0,8, 0,0,0],
+
+    [0,0,0, 0,4,0, 8,0,0],
+    [0,0,0, 2,0,0, 0,0,0],
+    [9,3,0, 0,0,0, 0,0,0]
+  ]
+};
+
+// default level
+numbers = JSON.parse(JSON.stringify(puzzles.medium));
 
 const config = {
   type: Phaser.AUTO,
   width: SIZE * CELL,
-  height: SIZE * CELL,
+  height: SIZE * CELL + 60,
   backgroundColor: "#ffffff",
-  scene: {
-    create: create
-  }
+  scene: { create }
 };
 
 new Phaser.Game(config);
 
 function create() {
   const scene = this;
+
+  // =======================
+  // TOMBOL LEVEL
+  // =======================
+  scene.add.text(10, 460, "Easy", {fontSize:"20px", color:"#00aa00"})
+    .setInteractive()
+    .on("pointerdown", () => loadLevel(scene, "easy"));
+
+  scene.add.text(80, 460, "Medium", {fontSize:"20px", color:"#0000aa"})
+    .setInteractive()
+    .on("pointerdown", () => loadLevel(scene, "medium"));
+
+  scene.add.text(170, 460, "Hard", {fontSize:"20px", color:"#aa0000"})
+    .setInteractive()
+    .on("pointerdown", () => loadLevel(scene, "hard"));
+
+  drawBoard(scene);
+}
+
+function drawBoard(scene) {
+  cells = [];
 
   for (let r = 0; r < SIZE; r++) {
     cells[r] = [];
@@ -52,8 +108,7 @@ function create() {
         .setInteractive();
 
       rect.on("pointerdown", () => {
-        selected.row = r;
-        selected.col = c;
+        selected = {row:r, col:c};
         highlight();
       });
 
@@ -61,7 +116,7 @@ function create() {
 
       let text = scene.add.text(x, y, numbers[r][c] || "", {
         fontSize: "20px",
-        color: fixed ? "#000" : "#000"
+        color: "#000"
       }).setOrigin(0.5);
 
       cells[r][c] = {rect, text, fixed};
@@ -90,61 +145,48 @@ function create() {
   });
 }
 
+function loadLevel(scene, level) {
+  scene.scene.restart();
+  numbers = JSON.parse(JSON.stringify(puzzles[level]));
+}
+
 function highlight() {
-  for (let r = 0; r < SIZE; r++) {
-    for (let c = 0; c < SIZE; c++) {
+  for (let r=0;r<SIZE;r++)
+    for (let c=0;c<SIZE;c++)
       cells[r][c].rect.setFillStyle(0xf0f0f0);
-    }
-  }
+
   cells[selected.row][selected.col].rect.setFillStyle(0xffe066);
 }
 
-function isValid(row, col, num) {
-  if (num === 0) return true;
+function isValid(row,col,num){
+  if(num===0) return true;
 
-  // cek baris
-  for (let c = 0; c < SIZE; c++) {
-    if (c !== col && numbers[row][c] === num) return false;
-  }
+  for(let c=0;c<SIZE;c++)
+    if(c!==col && numbers[row][c]===num) return false;
 
-  // cek kolom
-  for (let r = 0; r < SIZE; r++) {
-    if (r !== row && numbers[r][col] === num) return false;
-  }
+  for(let r=0;r<SIZE;r++)
+    if(r!==row && numbers[r][col]===num) return false;
 
-  // cek kotak 3x3
-  let startRow = Math.floor(row / 3) * 3;
-  let startCol = Math.floor(col / 3) * 3;
+  let sr=Math.floor(row/3)*3;
+  let sc=Math.floor(col/3)*3;
 
-  for (let r = startRow; r < startRow + 3; r++) {
-    for (let c = startCol; c < startCol + 3; c++) {
-      if ((r !== row || c !== col) && numbers[r][c] === num) {
-        return false;
-      }
-    }
-  }
+  for(let r=sr;r<sr+3;r++)
+    for(let c=sc;c<sc+3;c++)
+      if((r!==row||c!==col)&&numbers[r][c]===num) return false;
 
   return true;
 }
 
-function refreshColors() {
-  for (let r = 0; r < SIZE; r++) {
-    for (let c = 0; c < SIZE; c++) {
-      let val = numbers[r][c];
-
-      if (val === 0) {
-        cells[r][c].text.setColor("#000");
-      } 
-      else if (isValid(r, c, val)) {
-        cells[r][c].text.setColor("#000");
-      } 
-      else {
-        cells[r][c].text.setColor("#ff0000"); // merah kalau salah
-      }
+function refreshColors(){
+  for(let r=0;r<SIZE;r++){
+    for(let c=0;c<SIZE;c++){
+      let v=numbers[r][c];
+      if(v===0) cells[r][c].text.setColor("#000");
+      else if(isValid(r,c,v)) cells[r][c].text.setColor("#000");
+      else cells[r][c].text.setColor("#ff0000");
     }
   }
 }
 </script>
-
 </body>
 </html>
