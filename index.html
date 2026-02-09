@@ -18,28 +18,25 @@ let fixedMap=[];
 let seconds=0;
 let timerText;
 let timerEvent;
+let timerStarted=false;
 let sceneRef;
 let currentLevel="medium";
 let offsetX=0;
+let boardBottomY=0;
 
-/* ================== PHASER CONFIG ================== */
 const config={
   type:Phaser.AUTO,
   width:600,
-  height:540,
+  height:650,
   backgroundColor:"#ffffff",
   scene:{create}
 };
 
 new Phaser.Game(config);
 
-/* ================== CREATE ================== */
 function create(){
   sceneRef=this;
 
-  const centerX = this.cameras.main.width/2;
-
-  // ===== LEVEL SELECT (ATAS TENGAH) =====
   const select=document.createElement("select");
   select.style.position="absolute";
   select.style.top="15px";
@@ -65,19 +62,13 @@ function create(){
     loadLevel(currentLevel);
   };
 
-  // ===== TIMER =====
-  timerText=this.add.text(centerX,500,"Time: 0s",{
-    fontSize:"22px",
-    color:"#000"
-  }).setOrigin(0.5);
-
   loadLevel("medium");
 }
 
-/* ================== LOAD LEVEL ================== */
 function loadLevel(level){
 
   seconds=0;
+  timerStarted=false;
   offsetX=(sceneRef.cameras.main.width - SIZE*CELL)/2;
 
   if(timerEvent) timerEvent.remove();
@@ -86,7 +77,6 @@ function loadLevel(level){
   solution=JSON.parse(JSON.stringify(numbers));
   solveBoard(solution);
 
-  // clear old
   cells.flat().forEach(c=>{
     c.rect.destroy();
     c.text.destroy();
@@ -94,45 +84,51 @@ function loadLevel(level){
   cells=[];
   fixedMap=[];
 
-  // timer
-  timerEvent=sceneRef.time.addEvent({
-    delay:1000,
-    loop:true,
-    callback:()=>{
-      seconds++;
-      timerText.setText("Time: "+seconds+"s");
-    }
-  });
+  let startY=70;
 
-  // draw board
   for(let r=0;r<SIZE;r++){
     cells[r]=[];
     fixedMap[r]=[];
 
     for(let c=0;c<SIZE;c++){
       let x=offsetX + c*CELL + CELL/2;
-      let y=60 + r*CELL + CELL/2;
+      let y=startY + r*CELL + CELL/2;
 
       let rect=sceneRef.add.rectangle(x,y,CELL-2,CELL-2,0xf0f0f0)
-        .setStrokeStyle(1,0x000000)
-        .setInteractive();
+        .setStrokeStyle(1,0x000000);
 
-      rect.on("pointerdown",()=>{
-        selected={row:r,col:c};
-        highlight();
-      });
+      let fixed = numbers[r][c] !== 0;
+      fixedMap[r][c] = fixed;
 
-      let fixed=numbers[r][c]!==0;
-      fixedMap[r][c]=fixed;
+      if(!fixed){
+        rect.setInteractive();
+        rect.on("pointerdown",()=>{
+          selected={row:r,col:c};
+          highlight();
+          startTimer();
+        });
+      }
 
       let text=sceneRef.add.text(x,y,numbers[r][c]||"",{
-        fontSize:"20px",
-        color:"#000"
+        fontSize:"22px",
+        color: fixed ? "#1a1a1a" : "#000",
+        fontStyle: fixed ? "bold" : "normal"
       }).setOrigin(0.5);
 
       cells[r][c]={rect,text};
     }
   }
+
+  boardBottomY = startY + SIZE*CELL;
+
+  if(timerText) timerText.destroy();
+
+  timerText=sceneRef.add.text(
+    sceneRef.cameras.main.width/2,
+    boardBottomY + 15,
+    "Time: 0s",
+    {fontSize:"24px",color:"#000"}
+  ).setOrigin(0.5);
 
   sceneRef.input.keyboard.removeAllListeners();
 
@@ -142,6 +138,7 @@ function loadLevel(level){
     let n=parseInt(e.key);
 
     if(n>=1 && n<=9){
+      startTimer();
       numbers[selected.row][selected.col]=n;
       cells[selected.row][selected.col].text.setText(n);
       refreshColors();
@@ -159,16 +156,41 @@ function loadLevel(level){
   refreshColors();
 }
 
-/* ================== UI ================== */
-function highlight(){
-  for(let r=0;r<SIZE;r++)
-    for(let c=0;c<SIZE;c++)
-      cells[r][c].rect.setFillStyle(0xf0f0f0);
+/* ===== TIMER ===== */
+function startTimer(){
+  if(timerStarted) return;
+  timerStarted=true;
 
-  cells[selected.row][selected.col].rect.setFillStyle(0xffe066);
+  timerEvent=sceneRef.time.addEvent({
+    delay:1000,
+    loop:true,
+    callback:()=>{
+      seconds++;
+      timerText.setText("Time: "+seconds+"s");
+    }
+  });
 }
 
-/* ================== VALIDATION ================== */
+/* ===== HIGHLIGHT ROW + COLUMN ===== */
+function highlight(){
+  for(let r=0;r<SIZE;r++){
+    for(let c=0;c<SIZE;c++){
+      let color=0xf0f0f0;
+
+      if(r===selected.row || c===selected.col){
+        color=0xe6f2ff; // biru muda
+      }
+
+      cells[r][c].rect.setFillStyle(color);
+    }
+  }
+
+  if(!fixedMap[selected.row][selected.col]){
+    cells[selected.row][selected.col].rect.setFillStyle(0xffe066);
+  }
+}
+
+/* ===== VALIDATION ===== */
 function isValid(board,row,col,num){
   for(let c=0;c<9;c++)
     if(c!==col && board[row][c]===num) return false;
@@ -197,7 +219,7 @@ function refreshColors(){
   }
 }
 
-/* ================== WIN CHECK ================== */
+/* ===== WIN ===== */
 function checkWin(){
   for(let r=0;r<9;r++)
     for(let c=0;c<9;c++)
@@ -205,13 +227,13 @@ function checkWin(){
 
   timerEvent.remove();
 
-  sceneRef.add.text(sceneRef.cameras.main.width/2,250,"YOU WIN!",{
+  sceneRef.add.text(sceneRef.cameras.main.width/2,300,"YOU WIN!",{
     fontSize:"42px",
     color:"#00aa00"
   }).setOrigin(0.5);
 }
 
-/* ================== GENERATOR ================== */
+/* ===== GENERATOR ===== */
 function generatePuzzle(level){
   let board=Array.from({length:9},()=>Array(9).fill(0));
   solveBoard(board);
