@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Game Phaser</title>
+  <script src="node_modules/phaser/dist/phaser.js"></script>
+</head>
+<body>
+
+<script>
+const config = {
+    type: Phaser.AUTO,
+    width: 800,
+    height: 600,
+    backgroundColor: '#222',
+    scene: {
+        create: create
+    }
+};
+
+const game = new Phaser.Game(config);
+
+function create() {
+    this.add.text(250, 280, 'new', {
+        fontSize: '32px',
+        fill: '#ffffff'
+    });
+}
+</script>
+
+</body>
+</html>
