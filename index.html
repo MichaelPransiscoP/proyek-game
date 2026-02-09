@@ -1,29 +1,92 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Game Phaser</title>
-  <script src="node_modules/phaser/dist/phaser.js"></script>
+  <title>Sudoku Phaser</title>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.js"></script>
 </head>
 <body>
 
 <script>
+const SIZE = 9;
+const CELL = 50;
+let selected = {row: 0, col: 0};
+let cells = [];
+let numbers = [
+  [5,3,0, 0,7,0, 0,0,0],
+  [6,0,0, 1,9,5, 0,0,0],
+  [0,9,8, 0,0,0, 0,6,0],
+
+  [8,0,0, 0,6,0, 0,0,3],
+  [4,0,0, 8,0,3, 0,0,1],
+  [7,0,0, 0,2,0, 0,0,6],
+
+  [0,6,0, 0,0,0, 2,8,0],
+  [0,0,0, 4,1,9, 0,0,5],
+  [0,0,0, 0,8,0, 0,7,9]
+];
+
 const config = {
-    type: Phaser.AUTO,
-    width: 800,
-    height: 600,
-    backgroundColor: '#222',
-    scene: {
-        create: create
-    }
+  type: Phaser.AUTO,
+  width: SIZE * CELL,
+  height: SIZE * CELL,
+  backgroundColor: "#ffffff",
+  scene: {
+    create: create
+  }
 };
 
-const game = new Phaser.Game(config);
+new Phaser.Game(config);
 
 function create() {
-    this.add.text(250, 280, 'new', {
-        fontSize: '32px',
-        fill: '#ffffff'
-    });
+  const scene = this;
+
+  for (let r = 0; r < SIZE; r++) {
+    cells[r] = [];
+    for (let c = 0; c < SIZE; c++) {
+      let x = c * CELL + CELL/2;
+      let y = r * CELL + CELL/2;
+
+      let rect = scene.add.rectangle(x, y, CELL-2, CELL-2, 0xf0f0f0)
+        .setStrokeStyle(1, 0x000000)
+        .setInteractive();
+
+      rect.on("pointerdown", () => {
+        selected.row = r;
+        selected.col = c;
+        highlight(scene);
+      });
+
+      let text = scene.add.text(x, y, numbers[r][c] || "", {
+        fontSize: "20px",
+        color: "#000"
+      }).setOrigin(0.5);
+
+      cells[r][c] = {rect, text};
+    }
+  }
+
+  highlight(scene);
+
+  scene.input.keyboard.on("keydown", (event) => {
+    let n = parseInt(event.key);
+    if (n >= 1 && n <= 9) {
+      numbers[selected.row][selected.col] = n;
+      cells[selected.row][selected.col].text.setText(n);
+    }
+    if (event.key === "Backspace") {
+      numbers[selected.row][selected.col] = 0;
+      cells[selected.row][selected.col].text.setText("");
+    }
+  });
+}
+
+function highlight(scene) {
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      cells[r][c].rect.setFillStyle(0xf0f0f0);
+    }
+  }
+  cells[selected.row][selected.col].rect.setFillStyle(0xffe066);
 }
 </script>
 
