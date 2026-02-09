@@ -9,170 +9,152 @@
 <script>
 const SIZE = 9;
 const CELL = 50;
-let selected = {row: 0, col: 0};
-let cells = [];
-let numbers = [];
+let selected = {row:0,col:0};
+let cells=[];
+let numbers=[];
+let solution=[];
+let fixedMap=[];
+let timerText;
+let seconds=0;
+let timerEvent;
 
-// =======================
-// 3 LEVEL PUZZLE
-// =======================
-const puzzles = {
-  easy: [
-    [5,3,0, 6,7,8, 9,1,2],
-    [6,7,2, 1,9,5, 3,4,8],
-    [0,9,8, 3,4,2, 5,6,7],
-
-    [8,5,9, 7,6,1, 4,2,3],
-    [4,2,6, 8,5,3, 7,9,1],
-    [7,1,3, 9,2,4, 8,5,6],
-
-    [9,6,1, 5,3,7, 2,8,4],
-    [2,8,7, 4,1,9, 6,3,5],
-    [3,4,5, 2,8,6, 1,7,0]
-  ],
-
-  medium: [
-    [5,3,0, 0,7,0, 0,0,0],
-    [6,0,0, 1,9,5, 0,0,0],
-    [0,9,8, 0,0,0, 0,6,0],
-
-    [8,0,0, 0,6,0, 0,0,3],
-    [4,0,0, 8,0,3, 0,0,1],
-    [7,0,0, 0,2,0, 0,0,6],
-
-    [0,6,0, 0,0,0, 2,8,0],
-    [0,0,0, 4,1,9, 0,0,5],
-    [0,0,0, 0,8,0, 0,7,9]
-  ],
-
-  hard: [
-    [0,0,0, 0,0,0, 0,1,2],
-    [0,0,0, 0,0,7, 0,0,0],
-    [0,0,1, 0,9,0, 0,0,0],
-
-    [0,0,0, 5,0,0, 0,0,0],
-    [0,0,0, 1,0,4, 0,0,0],
-    [0,0,0, 0,0,8, 0,0,0],
-
-    [0,0,0, 0,4,0, 8,0,0],
-    [0,0,0, 2,0,0, 0,0,0],
-    [9,3,0, 0,0,0, 0,0,0]
-  ]
-};
-
-// default level
-numbers = JSON.parse(JSON.stringify(puzzles.medium));
-
-const config = {
-  type: Phaser.AUTO,
-  width: SIZE * CELL,
-  height: SIZE * CELL + 60,
-  backgroundColor: "#ffffff",
-  scene: { create }
+const config={
+  type:Phaser.AUTO,
+  width:SIZE*CELL,
+  height:SIZE*CELL+80,
+  backgroundColor:"#ffffff",
+  scene:{create}
 };
 
 new Phaser.Game(config);
 
-function create() {
-  const scene = this;
+function create(){
+  const scene=this;
 
-  // =======================
-  // TOMBOL LEVEL
-  // =======================
-  scene.add.text(10, 460, "Easy", {fontSize:"20px", color:"#00aa00"})
-    .setInteractive()
-    .on("pointerdown", () => loadLevel(scene, "easy"));
+  // ===== SELECT LEVEL (SATU BUTTON) =====
+  const select=document.createElement("select");
+  select.style.position="absolute";
+  select.style.top="10px";
+  select.style.left="10px";
+  select.innerHTML=`
+    <option value="easy">Easy</option>
+    <option value="medium" selected>Medium</option>
+    <option value="hard">Hard</option>
+  `;
+  document.body.appendChild(select);
 
-  scene.add.text(80, 460, "Medium", {fontSize:"20px", color:"#0000aa"})
-    .setInteractive()
-    .on("pointerdown", () => loadLevel(scene, "medium"));
+  select.onchange=()=>{
+    startGame(scene,select.value);
+  };
 
-  scene.add.text(170, 460, "Hard", {fontSize:"20px", color:"#aa0000"})
-    .setInteractive()
-    .on("pointerdown", () => loadLevel(scene, "hard"));
+  timerText=scene.add.text(250,460,"Time: 0s",{fontSize:"20px",color:"#000"});
 
-  drawBoard(scene);
+  startGame(scene,"medium");
 }
 
-function drawBoard(scene) {
-  cells = [];
+function startGame(scene,level){
+  scene.scene.restart({level});
+}
 
-  for (let r = 0; r < SIZE; r++) {
-    cells[r] = [];
-    for (let c = 0; c < SIZE; c++) {
-      let x = c * CELL + CELL/2;
-      let y = r * CELL + CELL/2;
+function initBoard(scene,level){
+  seconds=0;
+  numbers=generatePuzzle(level);
+  solution=JSON.parse(JSON.stringify(numbers));
+  solveBoard(solution);
 
-      let rect = scene.add.rectangle(x, y, CELL-2, CELL-2, 0xf0f0f0)
-        .setStrokeStyle(1, 0x000000)
+  fixedMap=[];
+  cells=[];
+
+  if(timerEvent) timerEvent.remove();
+
+  timerEvent=scene.time.addEvent({
+    delay:1000,
+    loop:true,
+    callback:()=>{
+      seconds++;
+      timerText.setText("Time: "+seconds+"s");
+    }
+  });
+
+  for(let r=0;r<SIZE;r++){
+    cells[r]=[];
+    fixedMap[r]=[];
+    for(let c=0;c<SIZE;c++){
+      let x=c*CELL+CELL/2;
+      let y=r*CELL+CELL/2;
+
+      let rect=scene.add.rectangle(x,y,CELL-2,CELL-2,0xf0f0f0)
+        .setStrokeStyle(1,0x000000)
         .setInteractive();
 
-      rect.on("pointerdown", () => {
-        selected = {row:r, col:c};
+      rect.on("pointerdown",()=>{
+        selected={row:r,col:c};
         highlight();
       });
 
-      let fixed = numbers[r][c] !== 0;
+      let fixed=numbers[r][c]!==0;
+      fixedMap[r][c]=fixed;
 
-      let text = scene.add.text(x, y, numbers[r][c] || "", {
-        fontSize: "20px",
-        color: "#000"
+      let text=scene.add.text(x,y,numbers[r][c]||"",{
+        fontSize:"20px",
+        color:"#000"
       }).setOrigin(0.5);
 
-      cells[r][c] = {rect, text, fixed};
+      cells[r][c]={rect,text};
     }
   }
 
   highlight();
   refreshColors();
 
-  scene.input.keyboard.on("keydown", (event) => {
-    if (cells[selected.row][selected.col].fixed) return;
+  scene.input.keyboard.removeAllListeners();
 
-    let n = parseInt(event.key);
+  scene.input.keyboard.on("keydown",(e)=>{
+    if(fixedMap[selected.row][selected.col]) return;
 
-    if (n >= 1 && n <= 9) {
-      numbers[selected.row][selected.col] = n;
+    let n=parseInt(e.key);
+    if(n>=1 && n<=9){
+      numbers[selected.row][selected.col]=n;
       cells[selected.row][selected.col].text.setText(n);
       refreshColors();
+      checkWin(scene);
     }
 
-    if (event.key === "Backspace") {
-      numbers[selected.row][selected.col] = 0;
+    if(e.key==="Backspace"){
+      numbers[selected.row][selected.col]=0;
       cells[selected.row][selected.col].text.setText("");
       refreshColors();
     }
   });
 }
 
-function loadLevel(scene, level) {
-  scene.scene.restart();
-  numbers = JSON.parse(JSON.stringify(puzzles[level]));
+function create(data){
+  const scene=this;
+  const level=data.level||"medium";
+  initBoard(scene,level);
 }
 
-function highlight() {
-  for (let r=0;r<SIZE;r++)
-    for (let c=0;c<SIZE;c++)
+function highlight(){
+  for(let r=0;r<SIZE;r++)
+    for(let c=0;c<SIZE;c++)
       cells[r][c].rect.setFillStyle(0xf0f0f0);
 
   cells[selected.row][selected.col].rect.setFillStyle(0xffe066);
 }
 
-function isValid(row,col,num){
-  if(num===0) return true;
-
+function isValid(board,row,col,num){
   for(let c=0;c<SIZE;c++)
-    if(c!==col && numbers[row][c]===num) return false;
+    if(c!==col && board[row][c]===num) return false;
 
   for(let r=0;r<SIZE;r++)
-    if(r!==row && numbers[r][col]===num) return false;
+    if(r!==row && board[r][col]===num) return false;
 
   let sr=Math.floor(row/3)*3;
   let sc=Math.floor(col/3)*3;
 
   for(let r=sr;r<sr+3;r++)
     for(let c=sc;c<sc+3;c++)
-      if((r!==row||c!==col)&&numbers[r][c]===num) return false;
+      if((r!==row||c!==col)&&board[r][c]===num) return false;
 
   return true;
 }
@@ -182,11 +164,74 @@ function refreshColors(){
     for(let c=0;c<SIZE;c++){
       let v=numbers[r][c];
       if(v===0) cells[r][c].text.setColor("#000");
-      else if(isValid(r,c,v)) cells[r][c].text.setColor("#000");
+      else if(isValid(numbers,r,c,v)) cells[r][c].text.setColor("#000");
       else cells[r][c].text.setColor("#ff0000");
     }
   }
 }
+
+function checkWin(scene){
+  for(let r=0;r<SIZE;r++){
+    for(let c=0;c<SIZE;c++){
+      if(numbers[r][c]===0) return;
+      if(numbers[r][c]!==solution[r][c]) return;
+    }
+  }
+
+  timerEvent.remove();
+  scene.add.text(150,200,"YOU WIN!",{
+    fontSize:"40px",
+    color:"#00aa00"
+  });
+}
+
+/* =========================
+   GENERATOR SUDOKU RANDOM
+========================= */
+
+function generatePuzzle(level){
+  let board=createEmpty();
+  solveBoard(board);
+  let removeCount={easy:35,medium:45,hard:55}[level];
+
+  while(removeCount>0){
+    let r=Math.floor(Math.random()*9);
+    let c=Math.floor(Math.random()*9);
+    if(board[r][c]!==0){
+      board[r][c]=0;
+      removeCount--;
+    }
+  }
+  return board;
+}
+
+function createEmpty(){
+  return Array.from({length:9},()=>Array(9).fill(0));
+}
+
+function solveBoard(board){
+  for(let r=0;r<9;r++){
+    for(let c=0;c<9;c++){
+      if(board[r][c]===0){
+        let nums=shuffle([1,2,3,4,5,6,7,8,9]);
+        for(let n of nums){
+          if(isValid(board,r,c,n)){
+            board[r][c]=n;
+            if(solveBoard(board)) return true;
+            board[r][c]=0;
+          }
+        }
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+function shuffle(arr){
+  return arr.sort(()=>Math.random()-0.5);
+}
 </script>
+
 </body>
 </html>
