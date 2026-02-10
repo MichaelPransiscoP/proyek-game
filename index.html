@@ -1,34 +1,41 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Sudoku Phaser</title>
-  <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.js"></script>
+  <title>Sudoku Pro</title>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.js"></script>
 </head>
-<body>
+<body style="margin:0;background:#e9eef5;font-family:Arial;">
 
 <script>
-const SIZE = 9;
-const CELL = 50;
+const SIZE=9, CELL=50;
+const BOARD_X=40;
+const BOARD_Y=80;
+const PANEL_X=610;
 
-let selected = {row:0,col:0};
+let sceneRef;
 let cells=[];
 let numbers=[];
 let solution=[];
 let fixedMap=[];
+let selected={row:0,col:0};
+
 let seconds=0;
-let timerText;
-let timerEvent;
+let timerEvent=null;
 let timerStarted=false;
-let sceneRef;
+
+let timerText,lifeText,hintText;
+let lives=3;
+let hints=3;
+let gameState="playing";
 let currentLevel="medium";
-let offsetX=0;
-let boardBottomY=0;
+
+let popupElements=[];
 
 const config={
   type:Phaser.AUTO,
-  width:600,
-  height:650,
-  backgroundColor:"#ffffff",
+  width:900,
+  height:600,
+  backgroundColor:"#e9eef5",
   scene:{create}
 };
 
@@ -37,126 +44,70 @@ new Phaser.Game(config);
 function create(){
   sceneRef=this;
 
+  // HEADER
+  this.add.rectangle(450,30,900,60,0x2d89ef);
+  this.add.text(30,15,"SUDOKU PHASER",{
+    fontSize:"28px",
+    color:"#ffffff",
+    fontStyle:"bold"
+  });
+
+  // PANEL BG
+  this.add.rectangle(720,320,260,480,0xffffff)
+    .setStrokeStyle(2,0xd0d7e2);
+
+  // DROPDOWN
   const select=document.createElement("select");
   select.style.position="absolute";
-  select.style.top="15px";
-  select.style.left="50%";
-  select.style.transform="translateX(-50%)";
-  select.style.padding="6px";
+  select.style.left="640px";
+  select.style.top="110px";
+  select.style.padding="10px";
   select.style.fontSize="16px";
-
+  select.style.borderRadius="10px";
+  select.style.border="none";
+  select.style.background="#2d89ef";
+  select.style.color="#fff";
+  select.style.fontWeight="bold";
   select.innerHTML=`
     <option value="easy">Easy</option>
     <option value="medium" selected>Medium</option>
-    <option value="hard">Hard</option>
-  `;
+    <option value="hard">Hard</option>`;
   document.body.appendChild(select);
 
   select.onchange=()=>{
-    const ok=confirm("Ganti level? Progress kamu akan hilang.");
-    if(!ok){
+    let nextLevel=select.value;
+    if(confirm("Change level? Progress will be lost.")){
+      currentLevel=nextLevel;
+      loadLevel(currentLevel);
+    }else{
       select.value=currentLevel;
-      return;
     }
-    currentLevel=select.value;
-    loadLevel(currentLevel);
   };
+
+  timerText=this.add.text(PANEL_X,180,"Time: 0s",{fontSize:"24px",color:"#222"});
+  lifeText=this.add.text(PANEL_X,220,"Lives: 3",{fontSize:"24px",color:"#222"});
+  hintText=this.add.text(PANEL_X,260,"Hints: 3",{fontSize:"24px",color:"#222"});
+
+  makeButton(PANEL_X+90,340,"Restart",()=>loadLevel(currentLevel));
+  makeButton(PANEL_X+90,400,"Hint",useHint);
 
   loadLevel("medium");
 }
 
-function loadLevel(level){
+function makeButton(x,y,label,cb){
+  let bg=sceneRef.add.rectangle(x,y,160,44,0x2d89ef)
+    .setInteractive()
+    .on("pointerdown",cb)
+    .on("pointerover",()=>bg.setFillStyle(0x1b5fbf))
+    .on("pointerout",()=>bg.setFillStyle(0x2d89ef));
 
-  seconds=0;
-  timerStarted=false;
-  offsetX=(sceneRef.cameras.main.width - SIZE*CELL)/2;
-
-  if(timerEvent) timerEvent.remove();
-
-  numbers=generatePuzzle(level);
-  solution=JSON.parse(JSON.stringify(numbers));
-  solveBoard(solution);
-
-  cells.flat().forEach(c=>{
-    c.rect.destroy();
-    c.text.destroy();
-  });
-  cells=[];
-  fixedMap=[];
-
-  let startY=70;
-
-  for(let r=0;r<SIZE;r++){
-    cells[r]=[];
-    fixedMap[r]=[];
-
-    for(let c=0;c<SIZE;c++){
-      let x=offsetX + c*CELL + CELL/2;
-      let y=startY + r*CELL + CELL/2;
-
-      let rect=sceneRef.add.rectangle(x,y,CELL-2,CELL-2,0xf0f0f0)
-        .setStrokeStyle(1,0x000000);
-
-      let fixed = numbers[r][c] !== 0;
-      fixedMap[r][c] = fixed;
-
-      if(!fixed){
-        rect.setInteractive();
-        rect.on("pointerdown",()=>{
-          selected={row:r,col:c};
-          highlight();
-          startTimer();
-        });
-      }
-
-      let text=sceneRef.add.text(x,y,numbers[r][c]||"",{
-        fontSize:"22px",
-        color: fixed ? "#1a1a1a" : "#000",
-        fontStyle: fixed ? "bold" : "normal"
-      }).setOrigin(0.5);
-
-      cells[r][c]={rect,text};
-    }
-  }
-
-  boardBottomY = startY + SIZE*CELL;
-
-  if(timerText) timerText.destroy();
-
-  timerText=sceneRef.add.text(
-    sceneRef.cameras.main.width/2,
-    boardBottomY + 15,
-    "Time: 0s",
-    {fontSize:"24px",color:"#000"}
-  ).setOrigin(0.5);
-
-  sceneRef.input.keyboard.removeAllListeners();
-
-  sceneRef.input.keyboard.on("keydown",(e)=>{
-    if(fixedMap[selected.row][selected.col]) return;
-
-    let n=parseInt(e.key);
-
-    if(n>=1 && n<=9){
-      startTimer();
-      numbers[selected.row][selected.col]=n;
-      cells[selected.row][selected.col].text.setText(n);
-      refreshColors();
-      checkWin();
-    }
-
-    if(e.key==="Backspace"){
-      numbers[selected.row][selected.col]=0;
-      cells[selected.row][selected.col].text.setText("");
-      refreshColors();
-    }
-  });
-
-  highlight();
-  refreshColors();
+  sceneRef.add.text(x,y,label,{
+    fontSize:"18px",
+    color:"#fff",
+    fontStyle:"bold"
+  }).setOrigin(0.5);
 }
 
-/* ===== TIMER ===== */
 function startTimer(){
   if(timerStarted) return;
   timerStarted=true;
@@ -171,41 +122,180 @@ function startTimer(){
   });
 }
 
-/* ===== HIGHLIGHT ROW + COLUMN ===== */
+function loadLevel(level){
+
+  popupElements.forEach(e=>e.destroy());
+  popupElements=[];
+
+  gameState="playing";
+  seconds=0;
+  lives=3;
+  hints=3;
+  timerStarted=false;
+
+  if(timerEvent) timerEvent.remove();
+
+  timerText.setText("Time: 0s");
+  lifeText.setText("Lives: 3");
+  hintText.setText("Hints: 3");
+
+  for(let r=0;r<cells.length;r++){
+    for(let c=0;c<cells[r].length;c++){
+      cells[r][c].rect.destroy();
+      cells[r][c].text.destroy();
+    }
+  }
+
+  cells=[];
+  fixedMap=[];
+
+  numbers=generatePuzzle(level);
+  solution=JSON.parse(JSON.stringify(numbers));
+  solveBoard(solution);
+
+  for(let r=0;r<SIZE;r++){
+    cells[r]=[];
+    fixedMap[r]=[];
+
+    for(let c=0;c<SIZE;c++){
+      let x=BOARD_X+c*CELL+CELL/2;
+      let y=BOARD_Y+r*CELL+CELL/2;
+
+      let rect=sceneRef.add.rectangle(x,y,CELL-2,CELL-2,0xffffff)
+        .setStrokeStyle(1,0xc8d0da);
+
+      let fixed=numbers[r][c]!==0;
+      fixedMap[r][c]=fixed;
+
+      if(!fixed){
+        rect.setInteractive();
+        rect.on("pointerdown",()=>{
+          selected={row:r,col:c};
+          highlight();
+        });
+      }
+
+      let text=sceneRef.add.text(x,y,numbers[r][c]||"",{
+        fontSize:"22px",
+        fontStyle:fixed?"bold":"normal",
+        color:"#000"
+      }).setOrigin(0.5);
+
+      cells[r][c]={rect,text};
+    }
+  }
+
+  selectFirstEmpty();
+  highlight();
+
+  sceneRef.input.keyboard.removeAllListeners();
+  sceneRef.input.keyboard.on("keydown",onKeyInput);
+}
+
+function onKeyInput(e){
+  if(gameState!=="playing") return;
+  if(fixedMap[selected.row][selected.col]) return;
+
+  startTimer();
+
+  let r=selected.row;
+  let c=selected.col;
+  let n=parseInt(e.key);
+
+  if(n>=1 && n<=9){
+    numbers[r][c]=n;
+    cells[r][c].text.setText(n);
+
+    if(solution[r][c]!==n){
+      lives--;
+      lifeText.setText("Lives: "+lives);
+      if(lives<=0) gameOver();
+    }
+
+    refreshColors();
+    checkWin();
+  }
+
+  if(e.key==="Backspace"){
+    numbers[r][c]=0;
+    cells[r][c].text.setText("");
+  }
+
+  highlight();
+}
+
+function showPopup(title,color){
+
+  popupElements.forEach(e=>e.destroy());
+  popupElements=[];
+
+  let bg = sceneRef.add.rectangle(450,300,900,600,0x000000,0.6).setDepth(999);
+  let panel = sceneRef.add.rectangle(450,300,340,200,0xffffff)
+    .setStrokeStyle(4,color)
+    .setDepth(1000);
+
+  let t1 = sceneRef.add.text(450,270,title,{
+    fontSize:"42px",
+    color:"#000",
+    fontStyle:"bold"
+  }).setOrigin(0.5).setDepth(1001);
+
+  let t2 = sceneRef.add.text(450,320,"Time: "+seconds+"s",{
+    fontSize:"22px",
+    color:"#333"
+  }).setOrigin(0.5).setDepth(1001);
+
+  popupElements.push(bg,panel,t1,t2);
+}
+
 function highlight(){
+  let val=numbers[selected.row][selected.col];
+
   for(let r=0;r<SIZE;r++){
     for(let c=0;c<SIZE;c++){
-      let color=0xf0f0f0;
+      let color=0xffffff;
 
-      if(r===selected.row || c===selected.col){
-        color=0xe6f2ff; // biru muda
-      }
+      if(r===selected.row||c===selected.col) color=0xeaf3ff;
+      if(val!==0 && numbers[r][c]===val) color=0xd9ffd9;
 
       cells[r][c].rect.setFillStyle(color);
     }
   }
 
-  if(!fixedMap[selected.row][selected.col]){
-    cells[selected.row][selected.col].rect.setFillStyle(0xffe066);
+  cells[selected.row][selected.col].rect.setFillStyle(0xffe066);
+}
+
+function useHint(){
+  if(hints<=0 || gameState!=="playing") return;
+  startTimer();
+
+  for(let r=0;r<9;r++){
+    for(let c=0;c<9;c++){
+      if(numbers[r][c]===0){
+        numbers[r][c]=solution[r][c];
+        cells[r][c].text.setText(solution[r][c]);
+        hints--;
+        hintText.setText("Hints: "+hints);
+        return;
+      }
+    }
   }
 }
 
-/* ===== VALIDATION ===== */
-function isValid(board,row,col,num){
-  for(let c=0;c<9;c++)
-    if(c!==col && board[row][c]===num) return false;
-
+function checkWin(){
   for(let r=0;r<9;r++)
-    if(r!==row && board[r][col]===num) return false;
+    for(let c=0;c<9;c++)
+      if(numbers[r][c]!==solution[r][c]) return;
 
-  let sr=Math.floor(row/3)*3;
-  let sc=Math.floor(col/3)*3;
+  gameState="win";
+  if(timerEvent) timerEvent.remove();
+  showPopup("YOU WIN",0x00aa00);
+}
 
-  for(let r=sr;r<sr+3;r++)
-    for(let c=sc;c<sc+3;c++)
-      if((r!==row||c!==col)&&board[r][c]===num) return false;
-
-  return true;
+function gameOver(){
+  gameState="gameover";
+  if(timerEvent) timerEvent.remove();
+  showPopup("GAME OVER",0xff0000);
 }
 
 function refreshColors(){
@@ -219,34 +309,24 @@ function refreshColors(){
   }
 }
 
-/* ===== WIN ===== */
-function checkWin(){
+function selectFirstEmpty(){
   for(let r=0;r<9;r++)
     for(let c=0;c<9;c++)
-      if(numbers[r][c]!==solution[r][c]) return;
-
-  timerEvent.remove();
-
-  sceneRef.add.text(sceneRef.cameras.main.width/2,300,"YOU WIN!",{
-    fontSize:"42px",
-    color:"#00aa00"
-  }).setOrigin(0.5);
+      if(numbers[r][c]===0){
+        selected={row:r,col:c};
+        return;
+      }
 }
 
-/* ===== GENERATOR ===== */
 function generatePuzzle(level){
   let board=Array.from({length:9},()=>Array(9).fill(0));
   solveBoard(board);
-
   let remove={easy:35,medium:45,hard:55}[level];
 
-  while(remove>0){
+  while(remove--){
     let r=Math.floor(Math.random()*9);
     let c=Math.floor(Math.random()*9);
-    if(board[r][c]!==0){
-      board[r][c]=0;
-      remove--;
-    }
+    board[r][c]=0;
   }
   return board;
 }
@@ -255,8 +335,7 @@ function solveBoard(board){
   for(let r=0;r<9;r++){
     for(let c=0;c<9;c++){
       if(board[r][c]===0){
-        let nums=[1,2,3,4,5,6,7,8,9].sort(()=>Math.random()-0.5);
-        for(let n of nums){
+        for(let n=1;n<=9;n++){
           if(isValid(board,r,c,n)){
             board[r][c]=n;
             if(solveBoard(board)) return true;
@@ -267,6 +346,22 @@ function solveBoard(board){
       }
     }
   }
+  return true;
+}
+
+function isValid(board,row,col,num){
+  for(let i=0;i<9;i++){
+    if(i!==col && board[row][i]===num) return false;
+    if(i!==row && board[i][col]===num) return false;
+  }
+
+  let sr=Math.floor(row/3)*3;
+  let sc=Math.floor(col/3)*3;
+
+  for(let r=sr;r<sr+3;r++)
+    for(let c=sc;c<sc+3;c++)
+      if((r!==row||c!==col) && board[r][c]===num) return false;
+
   return true;
 }
 </script>
